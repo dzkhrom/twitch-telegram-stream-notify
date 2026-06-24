@@ -1,0 +1,53 @@
+name: Twitch Live Notifier
+
+on:
+  schedule:
+    - cron: "*/1 * * * *"   # проверка каждую минуту
+  workflow_dispatch:
+
+jobs:
+  check_twitch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Twitch Stream Status
+        id: twitch
+        run: |
+          STREAM_DATA=$(curl -s -H "Client-ID: ${{ secrets.TWITCH_CLIENT_ID }}" \
+                             -H "Authorization: Bearer ${{ secrets.TWITCH_ACCESS_TOKEN }}" \
+                             "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
+
+          echo "STREAM_DATA=$STREAM_DATA" >> $GITHUB_ENV
+
+          if echo "$STREAM_DATA" | grep -q '"type":"live"'; then
+            echo "LIVE=true" >> $GITHUB_ENV
+          else
+            echo "LIVE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Load last state
+        run: |
+          echo "LAST_STATE=${{ secrets.LAST_STATE }}" >> $GITHUB_ENV
+
+      - name: Send Telegram Notification
+        if: env.LIVE == 'true' && env.LAST_STATE != 'true'
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="🎮 Стрим начался! Заходи: https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
+
+      - name: Update LAST_STATE secret
+        if: env.LIVE == 'true' && env.LAST_STATE != 'true'
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: LAST_STATE
+          value: "true"
+          pa_token: ${{ secrets.PA_TOKEN }}
+
+      - name: Reset LAST_STATE when offline
+        if: env.LIVE == 'false' && env.LAST_STATE == 'true'
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: LAST_STATE
+          value: "false"
+          pa_token: ${{ secrets.PA_TOKEN }}
