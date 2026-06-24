@@ -30,19 +30,29 @@ jobs:
                              -H "Authorization: Bearer ${{ secrets.TWITCH_ACCESS_TOKEN }}" \
                              "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
 
+          echo "$STREAM_DATA" > stream.json
+
           if echo "$STREAM_DATA" | grep -q '"type":"live"'; then
             echo "LIVE=true" >> $GITHUB_ENV
           else
             echo "LIVE=false" >> $GITHUB_ENV
           fi
 
-            - name: Send Telegram Notification
+      - name: Extract stream title
+        run: |
+          TITLE=$(jq -r '.data[0].title // empty' stream.json)
+          if [ -z "$TITLE" ]; then
+            TITLE="Стрим начался!"
+          fi
+          echo "TITLE=$TITLE" >> $GITHUB_ENV
+
+      - name: Send Telegram Notification
         if: env.LIVE == 'true' && env.LAST_STATE != 'live'
         run: |
+          TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨%0A🎮 $TITLE%0A👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
           curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="Хейхоу! Домашний, уютный стрим уже в эфире ✨%0A🎮 $TITLE%0A👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
-
+            -d text="$TEXT"
 
       - name: Save new state
         run: |
