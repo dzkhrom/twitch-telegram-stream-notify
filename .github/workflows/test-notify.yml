@@ -1,0 +1,16 @@
+name: Test Telegram Notification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send_test_message:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send test Telegram message
+        run: |
+          TEXT="Это тестовое сообщение ✨%0A🎮 Проверка уведомлений%0A👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="$TEXT"
