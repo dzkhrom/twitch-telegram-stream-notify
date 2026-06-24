@@ -10,6 +10,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Load last state
+        id: load_state
+        run: |
+          if [ -f last_state.txt ]; then
+            LAST_STATE=$(cat last_state.txt)
+          else
+            LAST_STATE="offline"
+          fi
+          echo "LAST_STATE=$LAST_STATE" >> $GITHUB_ENV
+
       - name: Check Twitch Stream Status
         id: twitch
         run: |
@@ -17,37 +30,29 @@ jobs:
                              -H "Authorization: Bearer ${{ secrets.TWITCH_ACCESS_TOKEN }}" \
                              "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
 
-          echo "STREAM_DATA=$STREAM_DATA" >> $GITHUB_ENV
-
           if echo "$STREAM_DATA" | grep -q '"type":"live"'; then
             echo "LIVE=true" >> $GITHUB_ENV
           else
             echo "LIVE=false" >> $GITHUB_ENV
           fi
 
-      - name: Load last state
-        run: |
-          echo "LAST_STATE=${{ secrets.LAST_STATE }}" >> $GITHUB_ENV
-
       - name: Send Telegram Notification
-        if: env.LIVE == 'true' && env.LAST_STATE != 'true'
+        if: env.LIVE == 'true' && env.LAST_STATE != 'live'
         run: |
           curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d text="🎮 Стрим начался! Заходи: https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
 
-      - name: Update LAST_STATE secret
-        if: env.LIVE == 'true' && env.LAST_STATE != 'true'
-        uses: gliech/create-github-secret-action@v1
-        with:
-          name: LAST_STATE
-          value: "true"
-          pa_token: ${{ secrets.PA_TOKEN }}
+      - name: Save new state
+        run: |
+          if [ "${LIVE}" = "true" ]; then
+            echo "live" > last_state.txt
+          else
+            echo "offline" > last_state.txt
+          fi
 
-      - name: Reset LAST_STATE when offline
-        if: env.LIVE == 'false' && env.LAST_STATE == 'true'
-        uses: gliech/create-github-secret-action@v1
+      - name: Commit state file
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          name: LAST_STATE
-          value: "false"
-          pa_token: ${{ secrets.PA_TOKEN }}
+          commit_message: "Update stream state"
+          file_pattern: last_state.txt
