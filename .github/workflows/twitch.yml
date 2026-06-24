@@ -30,6 +30,7 @@ jobs:
                              -H "Authorization: Bearer ${{ secrets.TWITCH_ACCESS_TOKEN }}" \
                              "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
 
+          echo "STREAM_DATA: $STREAM_DATA"   # ← вывод в лог
           echo "$STREAM_DATA" > stream.json
 
           if echo "$STREAM_DATA" | grep -q '"type":"live"'; then
