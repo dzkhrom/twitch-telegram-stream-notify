@@ -26,48 +26,49 @@ jobs:
 
           echo "LAST_STATE=$LAST_STATE" >> "$GITHUB_ENV"
 
-        - name: Get Twitch Access Token
-  env:
-    TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
-    TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-  run: |
-    if [ -z "$TWITCH_CLIENT_ID" ]; then
-      echo "ERROR: TWITCH_CLIENT_ID is empty"
-      exit 1
-    fi
+      - name: Get Twitch Access Token
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        run: |
+          if [ -z "$TWITCH_CLIENT_ID" ]; then
+            echo "ERROR: TWITCH_CLIENT_ID is empty"
+            exit 1
+          fi
 
-    if [ -z "$TWITCH_CLIENT_SECRET" ]; then
-      echo "ERROR: TWITCH_CLIENT_SECRET is empty"
-      exit 1
-    fi
+          if [ -z "$TWITCH_CLIENT_SECRET" ]; then
+            echo "ERROR: TWITCH_CLIENT_SECRET is empty"
+            exit 1
+          fi
 
-    echo "Client ID length: ${#TWITCH_CLIENT_ID}"
-    echo "Client Secret length: ${#TWITCH_CLIENT_SECRET}"
+          echo "Client ID length: ${#TWITCH_CLIENT_ID}"
+          echo "Client Secret length: ${#TWITCH_CLIENT_SECRET}"
 
-    HTTP_RESPONSE=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" \
-      -X POST \
-      "https://id.twitch.tv/oauth2/token" \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      --data-urlencode "client_id=$TWITCH_CLIENT_ID" \
-      --data-urlencode "client_secret=$TWITCH_CLIENT_SECRET" \
-      --data-urlencode "grant_type=client_credentials")
+          HTTP_RESPONSE=$(curl -sS \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST \
+            "https://id.twitch.tv/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "client_id=$TWITCH_CLIENT_ID" \
+            --data-urlencode "client_secret=$TWITCH_CLIENT_SECRET" \
+            --data-urlencode "grant_type=client_credentials")
 
-    TOKEN_RESPONSE=$(echo "$HTTP_RESPONSE" | sed '/HTTP_STATUS:/d')
-    HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          TOKEN_RESPONSE=$(echo "$HTTP_RESPONSE" | sed '/HTTP_STATUS:/d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
 
-    echo "Twitch HTTP status: $HTTP_STATUS"
+          echo "Twitch HTTP status: $HTTP_STATUS"
 
-    ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
 
-    if [ -z "$ACCESS_TOKEN" ]; then
-      echo "ERROR: Twitch did not return an access token"
-      echo "Twitch error:"
-      echo "$TOKEN_RESPONSE" | jq '{error, status, message}'
-      exit 1
-    fi
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "ERROR: Twitch did not return an access token"
+            echo "Twitch error response:"
+            echo "$TOKEN_RESPONSE" | jq '{error, status, message}'
+            exit 1
+          fi
 
-    echo "Twitch access token received successfully"
-    echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+          echo "Twitch access token received successfully"
+          echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
 
       - name: Check Twitch Stream Status
         env:
@@ -75,27 +76,43 @@ jobs:
           TWITCH_ACCESS_TOKEN: ${{ env.TWITCH_ACCESS_TOKEN }}
           TWITCH_USERNAME: ${{ secrets.TWITCH_USERNAME }}
         run: |
+          if [ -z "$TWITCH_CLIENT_ID" ]; then
+            echo "ERROR: TWITCH_CLIENT_ID is empty"
+            exit 1
+          fi
+
           if [ -z "$TWITCH_ACCESS_TOKEN" ]; then
             echo "ERROR: TWITCH_ACCESS_TOKEN is empty"
             exit 1
           fi
 
-          STREAM_DATA=$(curl -sS \
+          if [ -z "$TWITCH_USERNAME" ]; then
+            echo "ERROR: TWITCH_USERNAME is empty"
+            exit 1
+          fi
+
+          HTTP_RESPONSE=$(curl -sS \
+            -w "\nHTTP_STATUS:%{http_code}" \
             -H "Client-ID: $TWITCH_CLIENT_ID" \
             -H "Authorization: Bearer $TWITCH_ACCESS_TOKEN" \
             "https://api.twitch.tv/helix/streams?user_login=$TWITCH_USERNAME")
 
-          echo "Twitch API response:"
-          echo "$STREAM_DATA"
+          STREAM_DATA=$(echo "$HTTP_RESPONSE" | sed '/HTTP_STATUS:/d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
 
-          if echo "$STREAM_DATA" | jq -e '.error' > /dev/null; then
-            echo "ERROR: Twitch API returned an error"
+          echo "Twitch API HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "ERROR: Twitch API request failed"
+            echo "$STREAM_DATA" | jq '{error, status, message}'
             exit 1
           fi
 
           echo "$STREAM_DATA" > stream.json
 
-          if [ "$(echo "$STREAM_DATA" | jq '.data | length')" -gt 0 ]; then
+          STREAM_COUNT=$(echo "$STREAM_DATA" | jq '.data | length')
+
+          if [ "$STREAM_COUNT" -gt 0 ]; then
             echo "LIVE=true" >> "$GITHUB_ENV"
           else
             echo "LIVE=false" >> "$GITHUB_ENV"
@@ -109,7 +126,11 @@ jobs:
             TITLE="Стрим начался!"
           fi
 
-          echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+          {
+            echo 'TITLE<<EOF'
+            echo "$TITLE"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
 
       - name: Send Telegram Notification
         if: env.LIVE == 'true' && env.LAST_STATE != 'live'
@@ -118,6 +139,16 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TWITCH_USERNAME: ${{ secrets.TWITCH_USERNAME }}
         run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "ERROR: TELEGRAM_BOT_TOKEN is empty"
+            exit 1
+          fi
+
+          if [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "ERROR: TELEGRAM_CHAT_ID is empty"
+            exit 1
+          fi
+
           TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨
 
           🎮 $TITLE
@@ -129,7 +160,13 @@ jobs:
             -d "chat_id=$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$TEXT")
 
-          echo "$RESPONSE"
+          OK=$(echo "$RESPONSE" | jq -r '.ok // false')
+
+          if [ "$OK" != "true" ]; then
+            echo "ERROR: Telegram message was not sent"
+            echo "$RESPONSE" | jq '{ok, error_code, description}'
+            exit 1
+          fi
 
       - name: Save new state
         run: |
@@ -139,7 +176,7 @@ jobs:
             echo "offline" > last_state.txt
           fi
 
-      - name: Commit state file
+      - name: Commit state
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update stream state"
