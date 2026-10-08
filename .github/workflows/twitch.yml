@@ -68,6 +68,7 @@ jobs:
           fi
 
           echo "Twitch access token received successfully"
+          echo "::add-mask::$ACCESS_TOKEN"
           echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
 
       - name: Check Twitch Stream Status
