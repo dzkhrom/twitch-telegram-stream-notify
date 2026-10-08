@@ -73,7 +73,7 @@ jobs:
       - name: Check Twitch Stream Status
         env:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
-          TWITCH_ACCESS_TOKEN: ${{ env.TWITCH_ACCESS_TOKEN }}
+          TWITCH_ACCESS_TOKEN: "::add-mask::${{ env.TWITCH_ACCESS_TOKEN }}"
           TWITCH_USERNAME: ${{ secrets.TWITCH_USERNAME }}
         run: |
           if [ -z "$TWITCH_CLIENT_ID" ]; then
