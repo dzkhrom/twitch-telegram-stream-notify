@@ -2,10 +2,10 @@ name: Twitch Live Notifier
 
 permissions:
   contents: write
-  
+
 on:
   schedule:
-    - cron: "*/1 * * * *"   # проверка каждую минуту
+    - cron: "*/1 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,26 +17,38 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Load last state
-        id: load_state
         run: |
           if [ -f last_state.txt ]; then
             LAST_STATE=$(cat last_state.txt)
           else
             LAST_STATE="offline"
           fi
+
           echo "LAST_STATE=$LAST_STATE" >> $GITHUB_ENV
 
-      - name: Check Twitch Stream Status
-        id: twitch
+      - name: Get Twitch Access Token
         run: |
-          STREAM_DATA=$(curl -s -H "Client-ID: ${{ secrets.TWITCH_CLIENT_ID }}" \
-                             -H "Authorization: Bearer ${{ secrets.TWITCH_ACCESS_TOKEN }}" \
-                             "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
+          TOKEN_RESPONSE=$(curl -s -X POST "https://id.twitch.tv/oauth2/token" \
+            -d "client_id=${{ secrets.TWITCH_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.TWITCH_CLIENT_SECRET }}" \
+            -d "grant_type=client_credentials")
 
-          echo "STREAM_DATA: $STREAM_DATA"   # ← вывод в лог
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      - name: Check Twitch Stream Status
+        run: |
+          STREAM_DATA=$(curl -s \
+            -H "Client-ID: ${{ secrets.TWITCH_CLIENT_ID }}" \
+            -H "Authorization: Bearer ${{ env.TWITCH_ACCESS_TOKEN }}" \
+            "https://api.twitch.tv/helix/streams?user_login=${{ secrets.TWITCH_USERNAME }}")
+
+          echo "STREAM_DATA: $STREAM_DATA"
+
           echo "$STREAM_DATA" > stream.json
 
-          if echo "$STREAM_DATA" | grep -q '"type":"live"'; then
+          if [ "$(echo "$STREAM_DATA" | jq '.data | length')" -gt 0 ]; then
             echo "LIVE=true" >> $GITHUB_ENV
           else
             echo "LIVE=false" >> $GITHUB_ENV
@@ -45,22 +57,32 @@ jobs:
       - name: Extract stream title
         run: |
           TITLE=$(jq -r '.data[0].title // empty' stream.json)
+
           if [ -z "$TITLE" ]; then
             TITLE="Стрим начался!"
           fi
+
           echo "TITLE=$TITLE" >> $GITHUB_ENV
 
       - name: Send Telegram Notification
         if: env.LIVE == 'true' && env.LAST_STATE != 'live'
         run: |
-          TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨%0A🎮 $TITLE%0A👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
-          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨
+
+🎮 $TITLE
+
+👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
+
+          RESPONSE=$(curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="$TEXT"
+            --data-urlencode text="$TEXT")
+
+          echo "$RESPONSE"
 
       - name: Save new state
         run: |
-          if [ "${LIVE}" = "true" ]; then
+          if [ "${{ env.LIVE }}" = "true" ]; then
             echo "live" > last_state.txt
           else
             echo "offline" > last_state.txt
