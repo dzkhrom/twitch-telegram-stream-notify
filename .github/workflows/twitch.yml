@@ -33,6 +33,8 @@ jobs:
             -d "client_secret=${{ secrets.TWITCH_CLIENT_SECRET }}" \
             -d "grant_type=client_credentials")
 
+          echo "$TOKEN_RESPONSE"
+
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
           echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
