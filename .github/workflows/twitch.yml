@@ -26,39 +26,48 @@ jobs:
 
           echo "LAST_STATE=$LAST_STATE" >> "$GITHUB_ENV"
 
-      - name: Get Twitch Access Token
-        env:
-          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
-          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: |
-          if [ -z "$TWITCH_CLIENT_ID" ]; then
-            echo "ERROR: TWITCH_CLIENT_ID is empty"
-            exit 1
-          fi
+        - name: Get Twitch Access Token
+  env:
+    TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+    TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+  run: |
+    if [ -z "$TWITCH_CLIENT_ID" ]; then
+      echo "ERROR: TWITCH_CLIENT_ID is empty"
+      exit 1
+    fi
 
-          if [ -z "$TWITCH_CLIENT_SECRET" ]; then
-            echo "ERROR: TWITCH_CLIENT_SECRET is empty"
-            exit 1
-          fi
+    if [ -z "$TWITCH_CLIENT_SECRET" ]; then
+      echo "ERROR: TWITCH_CLIENT_SECRET is empty"
+      exit 1
+    fi
 
-          TOKEN_RESPONSE=$(curl -sS -X POST \
-            "https://id.twitch.tv/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "client_id=$TWITCH_CLIENT_ID" \
-            -d "client_secret=$TWITCH_CLIENT_SECRET" \
-            -d "grant_type=client_credentials")
+    echo "Client ID length: ${#TWITCH_CLIENT_ID}"
+    echo "Client Secret length: ${#TWITCH_CLIENT_SECRET}"
 
-          echo "Token response received"
+    HTTP_RESPONSE=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" \
+      -X POST \
+      "https://id.twitch.tv/oauth2/token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      --data-urlencode "client_id=$TWITCH_CLIENT_ID" \
+      --data-urlencode "client_secret=$TWITCH_CLIENT_SECRET" \
+      --data-urlencode "grant_type=client_credentials")
 
-          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+    TOKEN_RESPONSE=$(echo "$HTTP_RESPONSE" | sed '/HTTP_STATUS:/d')
+    HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
 
-          if [ -z "$ACCESS_TOKEN" ]; then
-            echo "ERROR: Twitch did not return an access token"
-            echo "$TOKEN_RESPONSE"
-            exit 1
-          fi
+    echo "Twitch HTTP status: $HTTP_STATUS"
 
-          echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+    ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+    if [ -z "$ACCESS_TOKEN" ]; then
+      echo "ERROR: Twitch did not return an access token"
+      echo "Twitch error:"
+      echo "$TOKEN_RESPONSE" | jq '{error, status, message}'
+      exit 1
+    fi
+
+    echo "Twitch access token received successfully"
+    echo "TWITCH_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
 
       - name: Check Twitch Stream Status
         env:
