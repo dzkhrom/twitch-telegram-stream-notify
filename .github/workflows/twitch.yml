@@ -69,9 +69,9 @@ jobs:
         run: |
           TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨
 
-🎮 $TITLE
+          🎮 $TITLE
 
-👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
+          👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
 
           RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
