@@ -67,15 +67,11 @@ jobs:
       - name: Send Telegram Notification
         if: env.LIVE == 'true' && env.LAST_STATE != 'live'
         run: |
-          TEXT=$(cat <<EOF
-          Хейхоу! Домашний, уютный стрим уже в эфире ✨
+          TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨
 
 🎮 $TITLE
 
-👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}
-
-EOF
-)
+👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
 
           RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
