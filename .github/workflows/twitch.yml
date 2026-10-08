@@ -72,7 +72,10 @@ jobs:
 
 🎮 $TITLE
 
-👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}"
+👉 https://twitch.tv/${{ secrets.TWITCH_USERNAME }}
+
+EOF
+)
 
           RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
