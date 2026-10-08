@@ -67,7 +67,8 @@ jobs:
       - name: Send Telegram Notification
         if: env.LIVE == 'true' && env.LAST_STATE != 'live'
         run: |
-          TEXT="Хейхоу! Домашний, уютный стрим уже в эфире ✨
+          TEXT=$(cat <<EOF
+          Хейхоу! Домашний, уютный стрим уже в эфире ✨
 
 🎮 $TITLE
 
